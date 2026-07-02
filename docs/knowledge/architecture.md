@@ -42,14 +42,22 @@ knows (P1's no-cheating-on-hidden-hands rule lives here). Hints ("what are my le
 did partner's bid promise"), difficulty levels, post-hand review, and attract-mode self-play are
 all *callers of the engine*, never features woven into the app.
 
-## 4. Client-only, offline-first
+## 4. Client-only, offline-first — one self-contained file
 
-There is no server. Everything runs in the browser. The service worker (Workbox via
-vite-plugin-pwa) precaches the app shell and the engine so the whole game is available with no
-network. Local persistence (IndexedDB / localStorage) holds progress, hand history, and stats.
-The install path is the iOS add-to-home-screen "semi-PWA." **The threat model is the metro
-tunnel:** the player opened the app, descended underground, lost WiFi, and everything — deal,
-auction, play, hints, review — must keep working from cache alone.
+There is no server. Everything runs in the browser, and it all ships as **one self-contained
+`dist/index.html`** — JS, CSS, and the inline-SVG card art inlined into a single file you could
+email. That file is offline the moment it is cached; there is no app shell to precache because
+there is no shell — the file *is* the app. A minimal (~20-line) service worker plus a web app
+manifest are the whole offline story: they exist only to make the iOS add-to-home-screen
+"semi-PWA" install reliable, not to orchestrate a precache. Local persistence is `localStorage`
+(a few KB: the PBN record history and stats). **The threat model is the metro tunnel:** the
+player opened the app, descended underground, lost WiFi, and everything — deal, auction, play,
+hints, review — must keep working from cache alone.
+
+The single file is a **compile target, not the authoring format.** The tortoise ships the *same*
+thin artifact as the hare — one offline, view-source-able HTML file — but compiled from tested,
+composable modules instead of typed out in one shot. **Same artifact shape, opposite
+provenance** is the exhibit.
 
 ## 5. Frugality by deletion
 
@@ -64,38 +72,42 @@ The offline single-player brief lets us delete almost everything a game backend 
 
 ## 6. Delivery topology
 
-Consumers of the same pure core, split so package boundaries police the architecture:
+The source collapses to **two concerns**, not five packages — the boundary that matters is
+"pure engine" vs. "thin view," and everything compiles to one file:
 
-- **`engine`** — pure rules + scoring (deal legality, auction legality, follow-suit, trick
-  resolution, contract scoring). PBN in → legal calls/plays / next state out. Imports nothing
-  DOM- or platform-specific.
-- **`ai`** — bidding AI and play AI as stateless functions. Imports `engine` only.
-- **`view`** — card/table components, `DealState → view`. No engine mutation, no platform
-  coupling.
-- **`client`** — the Vite app shell + service worker: the installable offline PWA at
-  `bridge.b28.dev`, local persistence for progress/history/stats.
-- **`showcase`** — a static bundle for the b28.dev cover slot: `engine` + `view` folding a
-  seeded self-play deal in the visitor's browser. No backend, always up — the cover art *is*
-  the production engine playing a deal live. Rebuilt deliberately and pinned, not auto-tracking.
+- **`src/core/`** — the pure engine + AI + PBN notation: rules + scoring (deal legality, auction
+  legality, follow-suit, trick resolution, contract scoring), the bidding AI (`record → call`)
+  and play AI (`record → card`) as stateless functions, and PBN parse/emit. **Zero DOM imports,
+  framework-agnostic TypeScript**, property-tested with vitest. This is the *only* place the
+  tortoise is "big," and it is big in **tests, not runtime** — tests never ship.
+- **`src/app/`** — a **thin view in Svelte 5** (components + runes `$state`/`$derived`), input
+  wiring, and `localStorage` persistence (PBN record + stats). State is a fold over the move
+  log; re-render is cheap because a card table's DOM is small. `core/` never imports `app/`.
 
-Deploy = Cloudflare static (Workers static assets or Pages) at `bridge.b28.dev`, CI/CD on push
-to main; the zone CSP rules for the embed are handled separately and are origin-agnostic.
+Both compile to a single **`dist/index.html`** via **Vite + `vite-plugin-singlefile`**, which
+inlines JS + CSS + the original inline-SVG card art into one file — no code-splitting, no vendor
+chunks. Deploy = that one file to **Cloudflare static** at `bridge.b28.dev`, CI on push to main.
+The **b28.dev cover slot embeds the same file** in attract mode: no separate showcase bundle,
+because the cover art *is* the production artifact folding a seeded self-play deal live. The zone
+CSP rules for the embed are handled separately and are origin-agnostic.
 
-## Stack (under discussion)
+## Stack (decided)
 
-The baseline: **TypeScript + Vite + vite-plugin-pwa (Workbox) + Cloudflare static.** A pure,
-tested TS engine in a package with zero DOM/platform imports; a Vite SPA whose service worker
-precaches the app shell and engine for offline; IndexedDB/localStorage for local state; static
-deploy to `bridge.b28.dev` on push to main.
+**TypeScript + Svelte 5 + Vite + `vite-plugin-singlefile` + Cloudflare static.** A pure, tested
+TS engine in `src/core/` with zero DOM/platform imports; a thin Svelte 5 view in `src/app/`;
+`localStorage` for local state; a ~20-line service worker + manifest for reliable iOS install;
+Vite builds it all to one self-contained `dist/index.html`, static-deployed to `bridge.b28.dev`
+on push to main.
 
-This is a deliberate divergence from the sibling entries. **Not Next.js/SSR/vinext** (that was
-RowClear) and **not Gleam/BEAM/Fly** (that was Consecutive) — both of those bought a server story
-that an offline single-player game simply does not have. There is no household table to own, no
-moves to POST, no machine to wake. A static SPA PWA is the right shape: the whole program is the
-client, and "server" would be dead weight.
+This is a deliberate divergence from the sibling entries. **Not Next.js/SSR** (that was RowClear)
+and **not Gleam/BEAM/Fly** (that was Consecutive) — both bought a server story an offline
+single-player game does not have. There is no household table to own, no moves to POST, no
+machine to wake. And **not Astro** — it is built for content/SSG, the wrong shape for a stateful
+game. One self-contained file is the right shape: the whole program is the client, and "server"
+would be dead weight.
 
-The **view framework is TBD**. React is the default because the team knows it, but Preact or
-Solid are on the table if offline-mobile bundle size argues for a lighter runtime — the engine
-and `ai` packages are framework-agnostic behind the PBN contract, so the view layer can be
-chosen (or swapped) late without touching the rules. The b28.dev embed/CSP work is zone-level
-and survives any of these choices.
+**Svelte 5 is the view framework** — a compiler, so components disappear into ~1–3KB of vanilla
+JS with no runtime VDOM; the best DX-to-weight ratio for an offline-mobile one-file app. It only
+touches `src/app/`, so it is **swappable**: `core/` is framework-agnostic behind the PBN
+contract, and the view layer could be replaced without touching the rules. The b28.dev embed/CSP
+work is zone-level and survives that choice.

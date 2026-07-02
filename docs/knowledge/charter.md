@@ -34,7 +34,7 @@ build/maintenance effort**. Every admitted epic must advance at least one invari
 - **In-bounds** — inside the vision. Reject: accounts/auth, online multiplayer, matchmaking,
   native apps, real-money play, tournaments.
 - **Well-formed** — decomposes into graph-valid stories/tickets with clean file boundaries
-  (engine / ai / view / client, per the package split).
+  (`src/core/` pure engine + AI + PBN vs. `src/app/` thin Svelte view, per architecture.md §6).
 
 ## De-prioritize / reject
 

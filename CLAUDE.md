@@ -16,16 +16,22 @@ designing or implementing anything.
 
 ## Stack
 
-- **TypeScript + Vite + vite-plugin-pwa (Workbox) + Cloudflare static.** An offline
+- **TypeScript + Svelte 5 + Vite + `vite-plugin-singlefile` + Cloudflare static.** An offline
   single-player game has no server story — no Next.js/SSR (that was RowClear), no BEAM/Fly (that
-  was Consecutive). The whole program is the client.
-- **Packages by concern** (see architecture.md §6): `engine` (pure rules + scoring, no DOM/
-  platform imports), `ai` (bidding + play AI, imports `engine` only), `view` (card/table
-  components), `client` (Vite app shell + service worker, the installable offline PWA),
-  `showcase` (static self-play bundle for the b28.dev cover slot).
-- **PBN (Portable Bridge Notation) is the public contract** between all packages. The engine's
-  interface is notation in → legal calls / legal plays / next state out. Property tests run over
-  PBN round-trips; a bug report is a PBN deal.
+  was Consecutive), no Astro (built for content/SSG, wrong shape for a stateful game). The whole
+  program is the client, and it ships as **one self-contained `dist/index.html`** (JS + CSS +
+  inline-SVG card art inlined into a single emailable file). The single file is a **compile
+  target, not the authoring format** — same thin artifact as the hare, compiled from tested
+  modules instead of one-shot. Same artifact shape, opposite provenance.
+- **Two concerns, not five packages** (see architecture.md §6): `src/core/` (pure engine + AI +
+  PBN, zero DOM imports, framework-agnostic TS, property-tested with vitest — big in *tests*,
+  which never ship) and `src/app/` (a thin Svelte 5 view — components + runes `$state`/
+  `$derived` — input wiring, and `localStorage` persistence). `core/` never imports `app/`;
+  Svelte is swappable because `core/` is framework-agnostic. Offline is a ~20-line service
+  worker + manifest for reliable iOS install — no Workbox, no precache manifest.
+- **PBN (Portable Bridge Notation) is the public contract.** The engine's interface is notation
+  in → legal calls / legal plays / next state out. Property tests run over PBN round-trips; a bug
+  report is a PBN deal.
 
 ## Architectural invariants (do not violate)
 
@@ -35,8 +41,11 @@ designing or implementing anything.
 - The bidding AI (`record → call`) and play AI (`record → card`) are stateless peripherals,
   never woven into app code, and reason only from what their seat legitimately knows (no
   cheating on hidden hands).
-- Offline-first: everything runs in-browser; the service worker precaches app shell + engine;
-  local persistence (IndexedDB/localStorage) for progress/history/stats. No server.
+- Ships as **one self-contained offline `index.html`** — the single file is a compile target,
+  not the authoring format. Offline is a ~20-line service worker + manifest (reliable iOS
+  install), not a precache framework; `localStorage` for progress/history/stats. No server.
+- **No framework in `core/`** — the pure engine + AI + PBN is framework-agnostic TypeScript; the
+  view is thin Svelte 5 in `src/app/` and is swappable without touching the rules.
 - Randomness is seeded; full deals must be deterministically simulatable (AI-vs-AI doubles as
   attract mode).
 - PBN is the contract. No accounts, no server, no online, no multiplayer, no matchmaking.
@@ -47,10 +56,10 @@ The toolchain (node, pnpm, etc.) is pinned in the project's flox environment; th
 recipes run through it. From the repo root:
 
 ```bash
-just test     # run the test suite (engine property tests + unit)
-just check    # typecheck / format / lint verification
 just dev      # local Vite dev server
-just build    # production build (app shell + service worker precache)
+just test     # vitest over core/ (engine property tests + unit)
+just check    # svelte-check + tsc
+just build    # vite build → single self-contained dist/index.html
 just deploy   # Cloudflare static deploy (bridge.b28.dev)
 ```
 

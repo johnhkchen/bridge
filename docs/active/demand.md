@@ -36,9 +36,10 @@ and off this board.
 
 ## Tier 3 — Offline-PWA + CI/CD (P3: it has to work in the tunnel and ship itself)
 
-- **Installable offline PWA** — Vite + vite-plugin-pwa app shell, service worker precaching
-  shell + engine, IndexedDB/localStorage for progress/history/stats; fully playable with no
-  network, add-to-home on iOS. _(advances P3)_
+- **Single-file offline build + minimal service worker** — Vite + `vite-plugin-singlefile`
+  compiling to one self-contained `dist/index.html`; a ~20-line service worker + web app
+  manifest for reliable iOS add-to-home; `localStorage` for progress/history/stats. Fully
+  playable with no network the moment the file is cached. _(advances P3)_
 - **Cloudflare static deploy + CI/CD** — push to main → tests → live at `bridge.b28.dev`,
   zero-touch embed. Deploy is nobody's job. _(advances P3)_
 
